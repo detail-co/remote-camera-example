@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>KVS WebRTC Test Page</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="loader.css">
+    <link rel="stylesheet" href="./app.css">
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.585.0.min.js"></script>
+    <script src="https://unpkg.com/@ungap/url-search-params"></script>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+    <link rel="icon" type="image/png" href="favicon.ico">
+</head>
+
+<body>
+
+    <div class="container mt-3">
+       
+        <div class="row loader"></div>
+        <div id="main" class="d-none">
+           
+                <div>
+                    <button id="master-button" type="button" class="btn btn-primary">Start Master</button>
+                    <button id="viewer-button" type="button" class="btn btn-primary">Start Viewer</button>
+                </div>
+
+            <div id="master" class="d-none">
+                <h2>Master</h2>
+                <div class="row">
+                    <div class="col">
+                        <h5>Master Section</h5>
+                        <div class="video-container"><video class="local-view" autoplay playsinline controls muted />
+                        </div>
+                    </div>
+                    <div class="col">
+                        <h5>Viewer Return Channel</h5>
+                        <div class="video-container"><video class="remote-view" autoplay playsinline controls /></div>
+                    </div>
+                </div>
+                <div>
+                    <button id="stop-master-button" type="button" class="btn btn-primary">Stop Master</button>
+                </div>
+            </div>
+
+            <div id="viewer" class="d-none">
+                <h2>Viewer</h2>
+                <div class="row">
+                    <div class="col">
+                        <h5>Return Channel</h5>
+                        <div class="video-container"><video class="local-view" autoplay playsinline controls muted />
+                        </div>
+                    </div>
+                    <div class="col">
+                        <h5>From Master</h5>
+                        <div class="video-container"><video class="remote-view" autoplay playsinline controls /></div>
+                    </div>
+                </div>
+                <div>
+                    <button id="stop-viewer-button" type="button" class="btn btn-primary">Stop Viewer</button>
+                </div>
+            </div>
+
+            <h3 id="logs-header">Logs</h3>
+            <div class="card bg-light mb-3">
+                <pre id="logs" class="card-body text-monospace preserve-whitespace"></pre>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="test"></div>
+
+    <script src="/kvs-webrtc.js"></script>
+    <script src="/master.js"></script>
+    <script src="/viewer.js"></script>
+    <script>
+
+        let ROLE = null; // Possible values: 'master', 'viewer', null
+
+        function configureLogging() {
+            function log(level, messages) {
+                const text = messages
+                    .map(message => {
+                        if (typeof message === 'object') {
+                            return JSON.stringify(message, null, 2);
+                        } else {
+                            return message;
+                        }
+                    })
+                    .join(' ');
+                $('#logs').append($(`<div class="${level.toLowerCase()}">`).text(`[${new Date().toISOString()}] [${level}] ${text}\n`));
+            }
+
+            console._error = console.error;
+            console.error = function (...rest) {
+                log('ERROR', Array.prototype.slice.call(rest));
+                console._error.apply(this, rest);
+            };
+
+            console._warn = console.warn;
+            console.warn = function (...rest) {
+                log('WARN', Array.prototype.slice.call(rest));
+                console._warn.apply(this, rest);
+            };
+
+            console._log = console.log;
+            console.log = function (...rest) {
+                log('INFO', Array.prototype.slice.call(rest));
+                console._log.apply(this, rest);
+            };
+        }
+
+        function onStatsReport(report) {
+            // TODO: Publish stats
+        }
+
+        function onStop() {
+            if (!ROLE) {
+                return;
+            }
+
+            if (ROLE === 'master') {
+                stopMaster();
+                $('#master').addClass('d-none');
+            } else {
+                stopViewer();
+                $('#viewer').addClass('d-none');
+            }
+
+            $('#form').removeClass('d-none');
+            ROLE = null;
+        }
+
+        window.addEventListener('beforeunload', onStop);
+
+        window.addEventListener('error', function (event) {
+            console.error(event.message);
+            event.preventDefault();
+        });
+
+        window.addEventListener('unhandledrejection', function (event) {
+            console.error(event.reason.toString());
+            event.preventDefault();
+        });
+
+        configureLogging();
+
+        $('#master-button').click(async () => {
+            ROLE = 'master';
+            $('#form').addClass('d-none');
+            $('#master').removeClass('d-none');
+
+            const localView = $('#master .local-view')[0];
+            const remoteView = $('#master .remote-view')[0];
+            const localMessage = $('#master .local-message')[0];
+            const remoteMessage = $('#master .remote-message')[0];
+
+
+            startMaster(localView, remoteView, onStatsReport, event => {
+                remoteMessage.append(`${event.data}\n`);
+            });
+        });
+
+        $('#stop-master-button').click(onStop);
+
+        $('#viewer-button').click(async () => {
+            ROLE = 'viewer';
+            $('#form').addClass('d-none');
+            $('#viewer').removeClass('d-none');
+
+            const localView = $('#viewer .local-view')[0];
+            const remoteView = $('#viewer .remote-view')[0];
+            const localMessage = $('#viewer .local-message')[0];
+            const remoteMessage = $('#viewer .remote-message')[0];
+
+            $(remoteMessage).empty();
+            localMessage.value = '';
+
+            startViewer(localView, remoteView, onStatsReport, event => {
+                remoteMessage.append(`${event.data}\n`);
+            });
+        });
+
+        $('#stop-viewer-button').click(onStop);
+
+        // The page is all setup. Hide the loading spinner and show the page content.
+        $('.loader').addClass('d-none');
+        $('#main').removeClass('d-none');
+        console.log('Page loaded');
+    </script>
+
+</body>
+
+</html>
