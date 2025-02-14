@@ -3,7 +3,7 @@ const AWS = require('aws-sdk');
 const { json, urlencoded } = express;
 const app = express();
 const SigV4RequestSigner = require('amazon-kinesis-video-streams-webrtc').SigV4RequestSigner;
-
+require('dotenv').config();
 app.use(express.static('public'))
 app.set('views', __dirname + '/public/views');
 app.engine('html', require('ejs').renderFile);
@@ -25,8 +25,8 @@ app.get('/', async (req, res) => {
 });
 
 app.get('/getConfig', async (req, res) => {
-  const region = 'REGION';
-  const channelName = 'MY-TEST-CHANNEL-NAME';
+  const region = process.env.AWS_REGION;
+  const channelName = process.env.AWS_CHANNEL_NAME;
 
   // make sure to put these two values somewhere safe (i.e. Secrets Manager)
   // these are the permissions required for this user
@@ -37,8 +37,9 @@ app.get('/getConfig', async (req, res) => {
   //                 "kinesisvideo:GetIceServerConfig",
   //                 "kinesisvideo:GetSignalingChannelEndpoint"
 
-  const signerAccessKeyId = 'ACCESS-KEY-ID';
-  const signerSecretKey = 'SECRET-KEY';
+  const signerAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const signerSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
+
 
   let clientId = req.query.clientId;
 
